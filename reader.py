@@ -49,8 +49,12 @@ def rating_range(hypothesis) :
     return hypothesis
     
 def dataload() :
+    # pycharm
+    # '~/Experiments/recommandation_system/multi_domain/multi_domain'
+    # jupyter
+    # '../..'
+    path = '../..' 
     # target
-    path = '~/Experiments/recommandation_system/multi_domain/multi_domain'
     clothing = pd.read_csv(f'{path}/dataset/new_clothing.csv')
     clothing_train = pd.read_csv(f'{path}/dataset/new_clothingset.csv')
     # auxiliary
@@ -63,31 +67,9 @@ def dataload() :
     clothing, clothing_train, patio, home, arts, phone, sports = set_index(clothing, clothing_train, patio, home, arts, phone, sports)
     item = clothing['item'].unique()
     user = clothing['user'].unique()
-    # # testset
-    # test_user = clothing[(clothing_train.rating - clothing.rating) < 0].user.to_numpy()
-    # test_item = clothing[(clothing_train.rating - clothing.rating) < 0].item.to_numpy()
-    # test_rating = clothing[(clothing_train.rating - clothing.rating) < 0].rating.to_numpy()
-    # testset = {}
-    # a = np.unique(test_user)
-    # for i in tqdm(a) :
-    #     testset[i] = {}
-    #     idx = np.where(test_user==i)[0]
-    #     testset[i]['total_item'] = test_item[idx]
-    #     testset[i]['total_count'] = len(test_item[idx])
-    #     #print(i, test_user[idx], test_item[idx], test_rating[idx])
-    #     idx = np.where((test_user==i) & (test_rating==5))[0]
-    #     if len(idx) == 0 :
-    #         testset[i]['item'] = []
-    #         testset[i]['count'] = 0
-    #         continue
-    #     testset[i]['item'] = test_item[idx]
-    #     testset[i]['count'] = len(test_item[idx])
-    # test = []
-    # test.append(testset)
-    # test.append(test_user)
-    # test.append(test_item)
-    # test.append(test_rating)
+
     clothing = clothing[clothing_train.rating == 0] # only testset
+    
     return clothing, clothing_train, arts, patio, home, phone, sports, user, item
 
 def get_trainset(main, aux, user, item) :
@@ -97,7 +79,7 @@ def get_trainset(main, aux, user, item) :
     main_item = main.item.to_numpy()
     main_rating = main.rating.to_numpy()
     # aux
-    aux = aux.loc[aux.user.isin(user)]
+    aux = aux.loc[aux.user.isin(main_user)]
     aux_user = aux.user.to_numpy()
     aux_item = aux.item.to_numpy()
     aux_rating = aux.rating.to_numpy()
@@ -129,7 +111,7 @@ def get_trainset(main, aux, user, item) :
                 label = []
                 triplet.append(i)
                 triplet.append(item_d1[j])
-                triplet.append(random.choice(item))
+                triplet.append(random.choice(aux_item))
                 label.append(rating_d1[j])
                 label.append(0)
                 trainset1.append(triplet)
@@ -157,7 +139,7 @@ def get_trainset(main, aux, user, item) :
                     label = []
                     triplet.append(i)
                     triplet.append(item_d1[k])
-                    triplet.append(random.choice(item))
+                    triplet.append(random.choice(aux_item))
                     label.append(rating_d1[k])
                     label.append(0)
                     trainset1.append(triplet)

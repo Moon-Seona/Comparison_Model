@@ -19,6 +19,7 @@ class CoNet(nn.Module):
         self.batch_size = config["batch_size"]
         self.cross_layer = config["cross_layer"]
         self.std = config["std"]
+        self.epoch = config["epoch"]
         self.initialise_nn()
 
         self.num_user, self.num_item_d1, self.num_item_d2 = self.dataset.get_number()
@@ -101,7 +102,7 @@ class CoNet(nn.Module):
         # sigmoid 제거!!!
         return z_d1, z_d2
     
-    def fit(self, num_epoch=101):
+    def fit(self):
         
         params = [{"params": self.parameters(), "lr":self.lr},
                   {"params": self.weights_shared, "lr": self.lr, "weight_decay":self.reg}]
@@ -112,10 +113,19 @@ class CoNet(nn.Module):
         train_data = torch.tensor(train_data)
         labels = torch.tensor(labels, device=device)
         # print(train_data.shape, labels.shape)
-
+        
+        [test_data, test_labels] = self.testset
+        test_data = torch.tensor(test_data)
+        test_labels = torch.tensor(test_labels, device=device)
+        
         labels_d1, labels_d2 = labels[:,0], labels[:,1]
         user, item_d1, item_d2 = train_data[:,0], train_data[:,1], train_data[:,2]
-        for epoch in tqdm(range(num_epoch)):
+        
+        test_labels_d1, test_labels_d2 = test_labels[:,0], test_labels[:,1]
+        test_user, test_item_d1, test_item_d2 = test_data[:,0], test_data[:,1], test_data[:,2]
+        
+        for epoch in tqdm(range(self.epoch)):
+            total_loss = 0
             permutation = torch.randperm(user.shape[0]) #  Returns a random permutation of integers from 0 to n - 1. => dataloader shuffle 과 같은 역할
             max_idx = int((len(permutation) // (self.batch_size/2) -1) * (self.batch_size/2))
             #range(0, max_idx, self.batch_size)
@@ -129,7 +139,22 @@ class CoNet(nn.Module):
                 loss = loss_d1 + loss_d2
                 loss.backward()
                 optimizer.step()
-                if batch % (self.batch_size*10) == 0 :
-                    print(f'epoch: {epoch}, batch: {batch}, loss: {loss}')
-            #if epoch % 10 == 0:
-            print("epoch {} loss: {:.4f}".format(epoch, loss))
+                total_loss += loss.item()
+#                 if batch % (self.batch_size*10) == 0 :
+#                     print(f'epoch: {epoch}, batch: {batch}, loss: {round(loss.item(), 4)}')
+            
+            print("epoch: {}, \t loss: {:.4f}".format(epoch, round(total_loss/self.batch_size, 4)))
+            # testset 확인
+            with torch.no_grad() :
+                pred, _ = self.forward(test_user, test_item_d1, test_item_d2)
+                test_loss = criterion(test_labels_d1.float(), torch.squeeze(pred))
+                diff = pred - test_labels_d1
+                diff = diff.cpu().detach()
+                test_mae = np.absolute(diff).mean()
+                test_rmse = np.sqrt((diff ** 2).mean())
+
+                print("Test MAE: {:4f}, Test RMSE: {:4f}, Test loss: {:4f}".format(test_mae.item(), test_rmse.item(), test_loss.item()))
+                #print('Test_diff :', diff)
+                #print('test loss: {:4f}'.format(test_loss.item()))
+                
+                
