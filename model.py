@@ -123,9 +123,11 @@ class CoNet(nn.Module):
         
         test_labels_d1, test_labels_d2 = test_labels[:,0], test_labels[:,1]
         test_user, test_item_d1, test_item_d2 = test_data[:,0], test_data[:,1], test_data[:,2]
-        
+
         for epoch in tqdm(range(self.epoch)):
             total_loss = 0
+            total_loss_d1 = 0
+            total_loss_d2 = 0
             permutation = torch.randperm(user.shape[0]) #  Returns a random permutation of integers from 0 to n - 1. => dataloader shuffle 과 같은 역할
             max_idx = int((len(permutation) // (self.batch_size/2) -1) * (self.batch_size/2))
             #range(0, max_idx, self.batch_size)
@@ -140,10 +142,12 @@ class CoNet(nn.Module):
                 loss.backward()
                 optimizer.step()
                 total_loss += loss.item()
+                total_loss_d1 += loss_d1.item()
+                total_loss_d2 += loss_d2.item()
 #                 if batch % (self.batch_size*10) == 0 :
 #                     print(f'epoch: {epoch}, batch: {batch}, loss: {round(loss.item(), 4)}')
             
-            print("epoch: {}, \t loss: {:.4f}".format(epoch, round(total_loss/self.batch_size, 4)))
+            print("epoch: {}, loss: {:.4f}, loss_d1: {:.4f}, loss_d2: {:.4f}".format(epoch, total_loss/self.batch_size, total_loss_d1/self.batch_size, total_loss_d2/self.batch_size))
             # testset 확인
             with torch.no_grad() :
                 pred, _ = self.forward(test_user, test_item_d1, test_item_d2)

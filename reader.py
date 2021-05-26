@@ -53,7 +53,7 @@ def dataload() :
     # '~/Experiments/recommandation_system/multi_domain/multi_domain'
     # jupyter
     # '../..'
-    path = '../..' 
+    path = '~/Experiments/recommandation_system/multi_domain/multi_domain'
     # target
     clothing = pd.read_csv(f'{path}/dataset/new_clothing.csv')
     clothing_train = pd.read_csv(f'{path}/dataset/new_clothingset.csv')
@@ -69,23 +69,28 @@ def dataload() :
     user = clothing['user'].unique()
 
     clothing = clothing[clothing_train.rating == 0] # only testset
-    
+
     return clothing, clothing_train, arts, patio, home, phone, sports, user, item
 
-def get_trainset(main, aux, user, item) :
+def get_trainset(main, aux, user, item, test_bool) :
     # triplet을 만들면, 굳이 아래 numpy를 만들어야 하나?
     # main
     main_user = main.user.to_numpy()
     main_item = main.item.to_numpy()
     main_rating = main.rating.to_numpy()
     # aux
-    aux = aux.loc[aux.user.isin(main_user)]
+    item2 = aux.item.to_numpy() # use for random choice
+    if test_bool :
+        aux = aux.loc[aux.item.isin(main_item)]
+    else :
+        aux = aux.loc[aux.user.isin(main_user)]
     aux_user = aux.user.to_numpy()
     aux_item = aux.item.to_numpy()
     aux_rating = aux.rating.to_numpy()
     linked_user = np.intersect1d(main_user, aux_user)
     trainset1 = [] # user, item1, item2
     trainset2 = [] # rating1, rating2
+
     for i in user :
         main_idx = np.where(main_user == i)[0] # length: 0도 가능
         aux_idx = np.where(aux_user == i)[0]
@@ -111,7 +116,7 @@ def get_trainset(main, aux, user, item) :
                 label = []
                 triplet.append(i)
                 triplet.append(item_d1[j])
-                triplet.append(random.choice(aux_item))
+                triplet.append(random.choice(item2))
                 label.append(rating_d1[j])
                 label.append(0)
                 trainset1.append(triplet)
@@ -139,7 +144,7 @@ def get_trainset(main, aux, user, item) :
                     label = []
                     triplet.append(i)
                     triplet.append(item_d1[k])
-                    triplet.append(random.choice(aux_item))
+                    triplet.append(random.choice(item2))
                     label.append(rating_d1[k])
                     label.append(0)
                     trainset1.append(triplet)
@@ -183,22 +188,22 @@ class Dataset:
         self.clothing, self.clothing_train, self.arts, self.patio, self.home, self.phone, self.sports, self.user, self.item = dataload()
         
         if self.domain == 'arts' :
-            self.trainset = get_trainset(self.clothing_train, self.arts, self.user, self.item)
-            self.testset = get_trainset(self.clothing, self.arts, self.user, self.item)
+            self.trainset = get_trainset(self.clothing_train, self.arts, self.user, self.item, False)
+            self.testset = get_trainset(self.clothing, self.arts, self.user, self.item, True)
         elif self.domain == 'patio' :
-            self.trainset = get_trainset(self.clothing_train, self.patio, self.user, self.item)
-            self.testset = get_trainset(self.clothing, self.patio, self.user, self.item)
+            self.trainset = get_trainset(self.clothing_train, self.patio, self.user, self.item, False)
+            self.testset = get_trainset(self.clothing, self.patio, self.user, self.item, True)
         elif self.domain == 'home' :
-            self.trainset = get_trainset(self.clothing_train, self.home, self.user, self.item)
-            self.testset = get_trainset(self.clothing, self.home, self.user, self.item)
+            self.trainset = get_trainset(self.clothing_train, self.home, self.user, self.item, False)
+            self.testset = get_trainset(self.clothing, self.home, self.user, self.item, True)
         elif self.domain == 'phone':
-            self.trainset = get_trainset(self.clothing_train, self.phone, self.user, self.item)
-            self.testset = get_trainset(self.clothing, self.phone, self.user, self.item)
+            self.trainset = get_trainset(self.clothing_train, self.phone, self.user, self.item, False)
+            self.testset = get_trainset(self.clothing, self.phone, self.user, self.item, True)
         else : # sports
-            self.trainset = get_trainset(self.clothing_train, self.sports, self.user, self.item)
-            self.testset = get_trainset(self.clothing, self.sports, self.user, self.item)
+            self.trainset = get_trainset(self.clothing_train, self.sports, self.user, self.item, False)
+            self.testset = get_trainset(self.clothing, self.sports, self.user, self.item, True)
 
-    def get_number(self): # 필요 없을 것같은데??
+    def get_number(self):
         # user
         num_user = self.user.max() + 1
         # item
@@ -228,12 +233,6 @@ class Dataset:
         #print(item_list)
         result = np.transpose(np.array([user_list, item_list]))
         return random.sample(result.tolist(), num)
-    
-    def get_train(self): # 얘도 필요 없을 것같은데..?
-        neg = self.neg_sampling(num=self.train_size)
-        pos = self.train_data
-        labels = [1] * len(pos) + [0] * len(neg)
-        return pos+neg, labels
     
     def get_data(self):
         return self.trainset, self.testset

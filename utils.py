@@ -4,7 +4,7 @@ import torch
 from tqdm import tqdm
 import random
 
-def train_iterable(train_d1, train_d2, label_d1, label_d2):
+def train_iterable(train_d1, train_d2, label_d1, label_d2): # no use
     df_d1 = pd.DataFrame(train_d1, columns=["users_d1", "items_d1"])
     df_d2 = pd.DataFrame(train_d2, columns=["users_d2", "items_d2"])
     df_d1["label_d1"] = label_d1
