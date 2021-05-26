@@ -1,8 +1,8 @@
-import os
-import torch
 import torch.nn as nn
 from reader import Dataset
 from utils import *
+from torch.utils.tensorboard import SummaryWriter
+from datetime import datetime
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 class CoNet(nn.Module):
@@ -103,6 +103,9 @@ class CoNet(nn.Module):
         return z_d1, z_d2
     
     def fit(self):
+
+        eventid = datetime.now().strftime('%m-%d %H:%M')  # 월-일 시간:분
+        writer = SummaryWriter(f'runs/{self.dataset}_{self.lr}_{self.edim}_{eventid}')
         
         params = [{"params": self.parameters(), "lr":self.lr},
                   {"params": self.weights_shared, "lr": self.lr, "weight_decay":self.reg}]
@@ -144,6 +147,9 @@ class CoNet(nn.Module):
                 total_loss += loss.item()
                 total_loss_d1 += loss_d1.item()
                 total_loss_d2 += loss_d2.item()
+                writer.add_scalar('iter/train_loss', loss.item(), epoch*(int(max_idx / self.batch_size)+1)+(batch/self.batch_size))
+                writer.add_scalar('iter/train_loss_d1', loss_d1.item(), epoch*(int(max_idx / self.batch_size)+1)+(batch/self.batch_size))
+                writer.add_scalar('iter/train_loss_d2', loss_d2.item(), epoch*(int(max_idx / self.batch_size)+1)+(batch/self.batch_size))
 #                 if batch % (self.batch_size*10) == 0 :
 #                     print(f'epoch: {epoch}, batch: {batch}, loss: {round(loss.item(), 4)}')
             
@@ -158,7 +164,3 @@ class CoNet(nn.Module):
                 test_rmse = np.sqrt((diff ** 2).mean())
 
                 print("Test MAE: {:4f}, Test RMSE: {:4f}, Test loss: {:4f}".format(test_mae.item(), test_rmse.item(), test_loss.item()))
-                #print('Test_diff :', diff)
-                #print('test loss: {:4f}'.format(test_loss.item()))
-                
-                
