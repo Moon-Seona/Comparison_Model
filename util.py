@@ -10,12 +10,10 @@ random.seed(SEED)
 np.random.seed(SEED)
 torch.manual_seed(SEED)
 
-
 def replaceIndex(dataframe, item_index, user_index):
     dataframe['item'] = dataframe['item'].apply(lambda x: item_index[x])
     dataframe['user'] = dataframe['user'].apply(lambda x: user_index[x])
     return dataframe
-
 
 def set_index(clothing, clothing_train, patio, home, arts, phone, sports):
     total_users = np.hstack(
@@ -47,14 +45,26 @@ def set_index(clothing, clothing_train, patio, home, arts, phone, sports):
     sports = replaceIndex(sports, item_index, user_index)
     arts = replaceIndex(arts, item_index, user_index)
 
-    return clothing, clothing_train, patio, home, arts, phone, sports
+    clothing = del_column(clothing)
+    clothing_train = del_column(clothing_train)
+    patio = del_column(patio)
+    phone = del_column(phone)
+    home = del_column(home)
+    sports = del_column(sports)
+    arts = del_column(arts)
 
+
+    return clothing, clothing_train, patio, home, arts, phone, sports
 
 def rating_range(hypothesis):
     hypothesis[hypothesis > 5] = 5
     hypothesis[hypothesis < 1] = 1
     return hypothesis
 
+def del_column(domain):
+    del domain['Unnamed: 0']
+    del domain['Unnamed: 0.1']
+    return domain
 
 def dataload():
     # pycharm
@@ -77,6 +87,7 @@ def dataload():
     item = clothing['item'].unique()
     user = clothing['user'].unique()
 
-    clothing = clothing[clothing_train.rating == 0]  # only testset
+    # only testset
+    #clothing = clothing[clothing_train.rating == 0]
 
     return clothing, clothing_train, arts, patio, home, phone, sports, user, item

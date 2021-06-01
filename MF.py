@@ -7,6 +7,21 @@ class MF(nn.Module):
 
         self.embed_user = nn.Embedding(usernum, factor_num)
         self.embed_item = nn.Embedding(itemnum, factor_num)
+
+    def forward(self, user, item, average):
+
+        user = self.embed_user(user)
+        item = self.embed_item(item)
+
+        predict = (user * item).sum(axis=1) + average
+
+        return predict, user, item
+class biasedMF(nn.Module):
+    def __init__(self, usernum, itemnum, factor_num):
+        super(biasedMF, self).__init__()
+
+        self.embed_user = nn.Embedding(usernum, factor_num)
+        self.embed_item = nn.Embedding(itemnum, factor_num)
         self.user_bias = nn.Parameter(torch.zeros((usernum,)))
         self.item_bias = nn.Parameter(torch.zeros((itemnum,)))
 
@@ -20,6 +35,6 @@ class MF(nn.Module):
         user = self.embed_user(user)
         item = self.embed_item(item)
 
-        predict = user * item + average + user_bias + item_bias
+        predict = (user * item).sum(axis=1) + average + user_bias + item_bias
 
-        return predict
+        return predict, user, item
