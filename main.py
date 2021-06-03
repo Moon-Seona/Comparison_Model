@@ -1,8 +1,7 @@
-#import numpy as np
-#import pandas as pd
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
+# pip install kmeans_pytorch
 
 #from CBMF import MF
 from MF import *
@@ -30,6 +29,13 @@ def main(model_name, aux_name, lr, lambda1, lambda2, k, epoch, batch, device):
         trainset = trainset.append(phone)
     elif aux_name == 'sports' :
         trainset = trainset.append(sports)
+    elif aux_name == 'multi' :
+        trainset = trainset.append(arts)
+        trainset = trainset.append(patio)
+        trainset = trainset.append(home)
+        trainset = trainset.append(phone)
+        trainset = trainset.append(sports)
+        #print(trainset.shape)
     else :
         print('Check aux domain name!')
         exit(1)
@@ -38,8 +44,10 @@ def main(model_name, aux_name, lr, lambda1, lambda2, k, epoch, batch, device):
     usernum = max(trainset.user) + 1
     #print(usernum, itemnum)
 
-    if model_name == 'MF':
+    if model_name == 'biasedMF':
         model = biasedMF(usernum, itemnum, k).to(device)
+    elif model_name == 'CBMF':
+        model = CBMF(usernum, itemnum, k).to(device)
     else:
         print('Check model name!')
         exit(1)
@@ -77,22 +85,30 @@ def main(model_name, aux_name, lr, lambda1, lambda2, k, epoch, batch, device):
             total_loss += cost.item()
             t.set_description('(Loss: %g)' % cost)
 
-        print('eopch: ', n, 'train loss: ', round(total_loss/len(t), 4))
+        print('eopch: ', n, 'train loss: ', round(total_loss/len(t)/batch, 4))
 
         model.eval()
         with torch.no_grad() :
             u  = torch.tensor(testset.user.values).to(device)
             i  = torch.tensor(testset.item.values).to(device)
             rating  = torch.tensor(testset.rating.values).to(device)
-            pred, _, _ = model(u, i, average.to(device))
+            pred, x, theta = model(u, i, average.to(device))
+            # regularization
+            reg_x = (lambda1 / 2) * torch.pow(x, 2).sum()
+            reg_theta = (lambda1 / 2) * torch.pow(theta, 2).sum()
+            reg_bias_user = (lambda2 / 2) * torch.pow(model.user_bias[u], 2).sum()
+            reg_bias_item = (lambda2 / 2) * torch.pow(model.item_bias[i], 2).sum()
+            loss = torch.pow(rating - pred - model.user_bias[u] - model.item_bias[i], 2).sum() + reg_x + reg_theta + reg_bias_user + reg_bias_item
+            #print(reg_x, reg_theta, reg_bias_item, reg_bias_user)
 
             diff = pred - rating
             mae = torch.abs(diff).mean()
             rmse = torch.sqrt(torch.pow(diff, 2).mean())
+            loss = loss/len(u)
 
-            print('MAE: ', mae, 'RMSE: ', rmse)
+            print('test loss: ', loss, 'MAE: ', mae, 'RMSE: ', rmse)
 
-            if mae <= best_mae or rmse <= best_rmse :
+            if mae <= best_mae: # or rmse <= best_rmse :
                 best_epoch = n
                 torch.save(model, f'save_dir/{model_name}_{aux_name}_{best_epoch}.pt')
                 best_mae = mae
@@ -103,12 +119,12 @@ def main(model_name, aux_name, lr, lambda1, lambda2, k, epoch, batch, device):
 if __name__ == '__main__' :
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_name', default='MF')
-    parser.add_argument('--aux_name', default='home')
-    parser.add_argument('--lr', type=float, default='1e-3')
-    parser.add_argument('--lambda1', type=int, default=50)
-    parser.add_argument('--lambda2', type=int, default=10)
-    parser.add_argument('--k', type=int, default=5)
+    parser.add_argument('--model_name', default='biasedMF')
+    parser.add_argument('--aux_name', default='multi')
+    parser.add_argument('--lr', type=float, default=0.001) # 0.001
+    parser.add_argument('--lambda1', type=int, default=50) # 50
+    parser.add_argument('--lambda2', type=int, default=10) # 10
+    parser.add_argument('--k', type=int, default=5) # 5
     parser.add_argument('--epoch', type=int, default=100)
     parser.add_argument('--batch', type=int, default=1024)
     parser.add_argument('--device', default='cuda:0')
