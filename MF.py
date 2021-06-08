@@ -8,7 +8,7 @@ class Clustering(nn.Module):
 
         self.clustering_num = clustering_num
 
-    def forward(self):
+    def forward(self, ):
         cluster = self.clustering_num
 
 class MF(nn.Module):
@@ -46,6 +46,8 @@ class biasedMF(nn.Module):
         user = self.embed_user(user)
         item = self.embed_item(item)
 
+        #print(user.shape, item.shape, (user*item).shape, (user * item).sum(axis=1).shape)
+
         predict = (user * item).sum(axis=1) + average + user_bias + item_bias
 
         return predict, user, item
@@ -69,9 +71,12 @@ class CBMF(nn.Module):
         user = self.embed_user(user)
         item = self.embed_item(item)
 
-        cluster_idx, _ = kmeans(user, num_clusters=10, device=torch.device('cuda:0')) # 여기서 해도 되나요...?
-        cluster_pred = 0
         # 0.3 = alpha, 0.7 = 1-alpha
-        predict = (user * item).sum(axis=1)*0.7 + cluster_pred*0.3  + average + user_bias + item_bias
+        #predict = (user * item).sum(axis=1)*0.7 + cluster_pred*0.3  + average + user_bias + item_bias
+
+        if len(user) != len(item) : # for clustering
+            predict = 0
+        else :
+            predict = (user * item).sum(axis=1) + average + user_bias + item_bias
 
         return predict, user, item

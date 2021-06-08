@@ -4,10 +4,10 @@ config = {
     "data_dir": "Clothing_and_Arts",
     "main_domain": "clothing", # main
     "aux_domain": "arts", # aux
-    "lr": 0.00003,
-    "edim": 10, 
+    "lr": 0.0001,
+    "edim": 20, # k?
     "cross_layer": 2,
-    "reg": 0.0001,
+    "reg": 0.1,
     "batch_size": 1024,
     "std": 0.01,
     "epoch": 1000

@@ -82,8 +82,8 @@ def get_trainset(main, aux, user, item, test_bool) :
     item2 = aux.item.to_numpy() # use for random choice
     if test_bool :
         aux = aux.loc[aux.item.isin(main_item)]
-    else :
-        aux = aux.loc[aux.user.isin(main_user)]
+    #else :
+        #aux = aux.loc[aux.user.isin(main_user)]
     aux_user = aux.user.to_numpy()
     aux_item = aux.item.to_numpy()
     aux_rating = aux.rating.to_numpy()
