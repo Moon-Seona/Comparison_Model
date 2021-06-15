@@ -7,7 +7,7 @@ config = {
     "lr": 0.0001,
     "edim": 20, # k?
     "cross_layer": 2,
-    "reg": 0.1,
+    "reg": 0.0001,
     "batch_size": 1024,
     "std": 0.01,
     "epoch": 1000

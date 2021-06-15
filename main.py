@@ -85,8 +85,8 @@ def main(model_name, aux_name, lr, lambda1, lambda2, k, epoch, batch, device):
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     average = torch.tensor(trainset.rating.values).mean()
-    trainset = TensorDataset(torch.tensor(trainset.user.values), torch.tensor(trainset.item.values), torch.tensor(trainset.rating.values))
-    train_data_loader = DataLoader(trainset, batch_size=batch, shuffle=True)
+    trainset1 = TensorDataset(torch.tensor(trainset.user.values), torch.tensor(trainset.item.values), torch.tensor(trainset.rating.values))
+    train_data_loader = DataLoader(trainset1, batch_size=batch, shuffle=True)
     if model_name == 'CBMF' :
         aux_average = torch.tensor(aux.rating.values).mean()
         aux = TensorDataset(torch.tensor(aux.user.values), torch.tensor(aux.item.values), torch.tensor(aux.rating.values))
@@ -96,6 +96,7 @@ def main(model_name, aux_name, lr, lambda1, lambda2, k, epoch, batch, device):
     best_loss = float('inf')
     best_mae = float('inf')
     best_rmse = float('inf')
+    best_hy = torch.zeros(testset.shape)
 
     for n in tqdm(range(epoch)):
         total_loss = 0
@@ -114,14 +115,35 @@ def main(model_name, aux_name, lr, lambda1, lambda2, k, epoch, batch, device):
             new_rating, new_rating2 = cluster_rating(main_users, main_items, aux_users, aux_items, main_users_mf, main_items_mf, aux_users_mf, aux_items_mf, trainset, aux)
 
             # cluster trainset rating example
-            trainset_rating2 = 0
-            trainset2 = TensorDataset(torch.tensor(trainset.user.values), torch.tensor(trainset.item.values), torch.tensor(trainset_rating2))
+            trainset2 = TensorDataset(torch.tensor(trainset.user.values), torch.tensor(trainset.item.values), torch.tensor(trainset.rating.values), new_rating)
             train_data_loader2 = DataLoader(trainset2, batch_size=batch, shuffle=True)
 
             model.train()
             aux_model.train()
+            t = tqdm(train_data_loader2, smoothing=0, mininterval=1.0)
 
-        t = tqdm(train_data_loader, smoothing=0, mininterval=1.0)
+            for iter, (u, i, rating, rating2) in enumerate(t):
+                u, i, rating, rating2 = u.to(device), i.to(device), rating.to(device). rating2.to(device)
+                pred, x, theta = model(u, i, average.to(device))
+                # regularization
+                reg_x = (lambda1 / 2) * torch.pow(x, 2).sum()
+                reg_theta = (lambda1 / 2) * torch.pow(theta, 2).sum()
+                reg_bias_user = (lambda2 / 2) * torch.pow(model.user_bias[u], 2).sum()
+                reg_bias_item = (lambda2 / 2) * torch.pow(model.item_bias[i], 2).sum()
+
+                cost = torch.pow(rating - pred - model.user_bias[u] - model.item_bias[i],
+                                 2).sum() + reg_x + reg_theta + reg_bias_user + reg_bias_item
+                # print(cost)
+                optimizer.zero_grad()
+                cost.backward()
+                optimizer.step()
+
+                total_loss += cost.item()
+                t.set_description('(Loss: %g)' % cost)
+
+            print('eopch: ', n, 'train loss: ', round(total_loss / len(t) / batch, 4))
+        else : # MF
+            t = tqdm(train_data_loader, smoothing=0, mininterval=1.0)
         for iter, (u, i, rating) in enumerate(t):
             u, i, rating = u.to(device), i.to(device), rating.to(device)
             pred, x, theta = model(u, i, average.to(device))
@@ -180,6 +202,7 @@ def main(model_name, aux_name, lr, lambda1, lambda2, k, epoch, batch, device):
             #print(reg_x, reg_theta, reg_bias_item, reg_bias_user)
 
             diff = pred - rating
+            #print(pred.shape)
             mae = torch.abs(diff).mean()
             rmse = torch.sqrt(torch.pow(diff, 2).mean())
             loss = loss/len(u)
@@ -191,8 +214,11 @@ def main(model_name, aux_name, lr, lambda1, lambda2, k, epoch, batch, device):
                 torch.save(model, f'save_dir/{model_name}_{aux_name}_{best_epoch}.pt')
                 best_mae = mae
                 best_rmse = rmse
+                best_hy = pred
 
     print('best epoch: ', best_epoch, 'best mae: ', best_mae, 'best rmse: ', best_rmse)
+    torch.load(f'save_dir/{model_name}_{aux_name}_{best_epoch}.pt')
+    torch.save(best_hy, f'save_dir/{aux_name}_hy.pt')
 
 if __name__ == '__main__' :
     import argparse
@@ -203,7 +229,7 @@ if __name__ == '__main__' :
     parser.add_argument('--lambda1', type=int, default=5) # 50
     parser.add_argument('--lambda2', type=float, default=0.5) # 10
     parser.add_argument('--k', type=int, default=20) # 5
-    parser.add_argument('--epoch', type=int, default=300)
+    parser.add_argument('--epoch', type=int, default=50)
     parser.add_argument('--batch', type=int, default=1024)
     parser.add_argument('--device', default='cuda:0')
     args = parser.parse_args()

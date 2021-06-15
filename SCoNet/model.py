@@ -107,8 +107,8 @@ class CoNet(nn.Module):
         eventid = datetime.now().strftime('%m-%d %H:%M')  # 월-일 시간:분
         writer = SummaryWriter(f'runs/{self.dataset}_{self.lr}_{self.edim}_{eventid}')
         
-        params = [{"params": self.parameters(), "lr":self.lr},
-                  {"params": self.weights_shared, "lr": self.lr, "weight_decay":self.reg}]
+        params = [{"params": self.parameters(), "lr":0.0003}, # self.lr
+                  {"params": self.weights_shared, "lr": 0.00001, "weight_decay":self.reg}]
         optimizer = torch.optim.Adam(params)
         criterion = nn.MSELoss()
         # 여기서 self.tainset, self.testset 불러와서 바로 훈련 가능하도록 만들기
