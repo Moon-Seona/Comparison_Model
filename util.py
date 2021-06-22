@@ -5,6 +5,7 @@ import torch
 from tqdm import tqdm
 import random
 from kmeans_pytorch import kmeans
+from fast_pytorch_kmeans import KMeans
 
 SEED = 2020
 random.seed(SEED)
@@ -93,61 +94,102 @@ def dataload():
 
     return clothing, clothing_train, arts, patio, home, phone, sports, user, item
 
-def cluster_rating(main_users, main_items, aux_users, aux_items, main_users_mf, main_items_mf, aux_users_mf, aux_items_mf, main, aux) :
+def cluster_rating(users_mf, items_mf , rating, cluster) :
     device = 'cuda:0'
 
-    num_clusters = 10
-
-    # cluster idx, cluster center
-    main_user_cluster_idx, _ = kmeans(main_users_mf, num_clusters=num_clusters, device=device)
-    main_item_cluster_idx, _ = kmeans(main_items_mf, num_clusters=num_clusters, device=device)
-    aux_user_cluster_idx, _ = kmeans(aux_users_mf, num_clusters=num_clusters, device=device)
-    aux_item_cluster_idx, _ = kmeans(aux_items_mf, num_clusters=num_clusters, device=device)
+    num_clusters = cluster # 수 변경?
+    #
+    # # cluster idx, cluster center
+    # user_cluster_idx, _ = kmeans(users_mf, num_clusters=num_clusters, device=device)
+    # item_cluster_idx, _ = kmeans(items_mf, num_clusters=num_clusters, device=device)
+    #aux_user_cluster_idx, _ = kmeans(aux_users_mf, num_clusters=num_clusters, device=device)
+    #aux_item_cluster_idx, _ = kmeans(aux_items_mf, num_clusters=num_clusters, device=device)
     # cluster rating mean..
     # threshold = 5 ?
-    main_rating = torch.tensor([li[2] for li in main])
-    aux_rating = torch.tensor([li[2] for li in aux])
-    # main
-    cluster_i = [] # user
-    cluster_j = [] # item
-    new_rating = torch.zeros(main_rating.shape, dtype=torch.double)
-    for (u,i,rating) in tqdm(main) : # 2 seconds
-        #print(u,i,rating)
-        cluster_i.append(main_user_cluster_idx[u].item())
-        cluster_j.append(main_item_cluster_idx[i].item())
+    kmeans = KMeans(n_clusters=num_clusters, mode='euclidean', verbose=1) # 여기를 변경해야댐!!!!!!!!!!!!!!!!!!!
+    user_cluster_idx = kmeans.fit_predict(users_mf)
+    item_cluster_idx = kmeans.fit_predict(items_mf)
 
-    cluster_i = torch.tensor(cluster_i)
-    cluster_j = torch.tensor(cluster_j)
+    # for i in range(10) :
+    #     print(i, user_cluster_idx[user_cluster_idx==i].shape)
+    #     print(i, item_cluster_idx[item_cluster_idx==i].shape)
+
+    new_rating = torch.zeros(rating.shape, dtype=torch.double).to(device)
+    user_cluster_idx, item_cluster_idx = user_cluster_idx.to(device), item_cluster_idx.to(device)
 
     for i in range(num_clusters) : # user
         for j in range(num_clusters) : # item
             # user, item list
-            idx = (cluster_i == i) & (cluster_j == j)
-            t = main_rating[idx]
+            idx = (user_cluster_idx == i) & (item_cluster_idx == j)
+            t = rating[idx]
             if len(t) <= 5 : # threshold
                 continue
             new_rating[idx] = torch.mean(t)
             #print(i, j, t.shape)
     #print(new_rating.shape, new_rating.mean(), new_rating)
-    # aux
-    cluster_i2 = []  # user
-    cluster_j2 = []  # item
-    new_rating2 = torch.zeros(aux_rating.shape, dtype=torch.double)
-    for (u, i, rating) in tqdm(aux):  # 2 seconds
-        # print(u,i,rating)
-        cluster_i2.append(aux_user_cluster_idx[u].item())
-        cluster_j2.append(aux_item_cluster_idx[i].item())
+    return new_rating
 
-    cluster_i2 = torch.tensor(cluster_i2)
-    cluster_j2 = torch.tensor(cluster_j2)
 
-    for i in range(num_clusters):  # user
-        for j in range(num_clusters):  # item
-            # user, item list
-            idx = (cluster_i2 == i) & (cluster_j2 == j)
-            t = aux_rating[idx]
-            if len(t) <= 5:  # threshold
-                continue
-            new_rating2[idx] = torch.mean(t)
-    #print(new_rating2[new_rating2==0].shape)
-    return new_rating, new_rating2
+def recall(k, score, dic):
+    '''
+    k : top-k
+    score : predict rating
+    '''
+    total = 0
+    count = 0
+    total_numerator = 0  # 분자
+    total_denominator = 0  # 분모
+
+    all_item = np.arange(score.shape[1])  # torch.range(0, score.shape[1]-1, dtype=int)
+
+    for user_i, user_id in enumerate(tqdm(list(dic.keys()))):  # test user
+        # top-k에서 맞춘 개수 / user 4점 이상인 test item 수
+        users_item = dic[user_id]['item']  # 5점 받은 item
+        no_item = np.setdiff1d(all_item, users_item)
+        sample_item = np.random.choice(no_item, 1000)
+        check = np.concatenate((users_item, sample_item))
+        check2 = np.setdiff1d(all_item, check)
+        score[user_id][check2] = 0
+
+        values, index = torch.topk(score[user_id], k)
+
+        numerator = np.intersect1d(users_item, index).shape[0]
+        denominator = dic[user_id]['count']
+        # denominator2 = k
+
+        if denominator == 0:
+            continue
+        elif denominator < k and numerator >= k:
+            numerator = denominator
+        # recall
+        total_denominator += denominator
+        # total_denominator2 += denominator2
+        total_numerator += numerator
+        count += 1
+
+    return total_numerator / total_denominator
+
+def multi_data(model_name, sample) :
+    pred1 = torch.load(f'save_dir/{model_name}_arts_{sample}_hy.pt').detach().cpu()
+    pred2 = torch.load(f'save_dir/{model_name}_patio_{sample}_hy.pt').detach().cpu()
+    pred3 = torch.load(f'save_dir/{model_name}_sports_{sample}_hy.pt').detach().cpu()
+    pred4 = torch.load(f'save_dir/{model_name}_phone_{sample}_hy.pt').detach().cpu()
+    pred5 = torch.load(f'save_dir/{model_name}_home_{sample}_hy.pt').detach().cpu()
+    return torch.stack([pred1, pred2, pred3, pred4, pred5])
+
+def get_count(main, domain) :
+    # count 미리 저장
+    domain_append = main.append(domain)
+    domain_append = domain_append[domain_append.user.isin(main.user) & domain_append.item.isin(domain.item)]
+    # 주 도메인의 사용자가 보조 도메인 arts에 평점 매긴 개수
+    domain_count = domain_append.groupby('user').count().rating
+    # 모든 사용자에 대해 일반화
+    total_count = np.zeros(len(main.user.unique()))
+    #print(total_count[list(domain_count.index)[0]])
+    total_count[domain_count.index] = domain_count.values
+    total_count = torch.tensor(total_count)
+    return total_count
+
+def sigmoid(x, n):
+    x = x - n
+    return 1 / (1 +torch.exp(-x))

@@ -87,6 +87,7 @@ class CoNet(nn.Module):
                 #print("cur_d1.shape", cur_d1.shape)
                 #print("cur_d2.shape", cur_d2.shape)
                 #print("w_.shape", self.weights_shared[l].shape)
+                #print(self.weights_shared)
                 cur_d1 = torch.matmul(pre_d2, self.weights_shared[l]) # L1 norm 추가해서 SCoNet 완성
                 cur_d2 = torch.matmul(pre_d1, self.weights_shared[l])
             cur_d1 = nn.functional.relu(cur_d1)
