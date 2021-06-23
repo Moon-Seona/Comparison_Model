@@ -3,14 +3,14 @@ import torch.nn as nn
 from kmeans_pytorch import kmeans
 from util import *
 
-class Clustering(nn.Module):
-    def __init__(self, clustering_num):
-        super(Clustering, self).__init__()
-
-        self.clustering_num = clustering_num
-
-    def forward(self, ):
-        cluster = self.clustering_num
+# class Clustering(nn.Module):
+#     def __init__(self, clustering_num):
+#         super(Clustering, self).__init__()
+#
+#         self.clustering_num = clustering_num
+#
+#     def forward(self, ):
+#         cluster = self.clustering_num
 
 class MF(nn.Module):
     def __init__(self, usernum, itemnum, factor_num):

@@ -73,7 +73,8 @@ def dataload():
     # '~/Experiments/recommandation_system/multi_domain/multi_domain'
     # jupyter
     # '../..'
-    path = '~/Experiments/recommandation_system/multi_domain/multi_domain'
+    #path = '~/Experiments/recommandation_system/multi_domain/multi_domain'
+    path  = '.'
     # target
     clothing = pd.read_csv(f'{path}/dataset/new_clothing.csv')
     clothing_train = pd.read_csv(f'{path}/dataset/new_clothingset.csv')
@@ -129,62 +130,68 @@ def cluster_rating(users_mf, items_mf , rating, cluster) :
     #print(new_rating.shape, new_rating.mean(), new_rating)
     return new_rating
 
-
 def recall(k, score, dic):
     '''
     k : top-k
     score : predict rating
     '''
-    total = 0
-    count = 0
+    np.random.seed(SEED)
+
     total_numerator = 0  # 분자
     total_denominator = 0  # 분모
+    count = 0
+    total = 0
 
     all_item = np.arange(score.shape[1])  # torch.range(0, score.shape[1]-1, dtype=int)
 
     for user_i, user_id in enumerate(tqdm(list(dic.keys()))):  # test user
         # top-k에서 맞춘 개수 / user 4점 이상인 test item 수
-        users_item = dic[user_id]['item']  # 5점 받은 item
+        users_item = [dic[user_id]['item']]  # 5점 받은 item
         no_item = np.setdiff1d(all_item, users_item)
-        sample_item = np.random.choice(no_item, 1000)
+        sample_item = np.random.choice(no_item, 1000, replace=False) # 중복 제거
         check = np.concatenate((users_item, sample_item))
-        check2 = np.setdiff1d(all_item, check)
-        score[user_id][check2] = 0
-
-        values, index = torch.topk(score[user_id], k)
-
-        numerator = np.intersect1d(users_item, index).shape[0]
+        #check2 = np.setdiff1d(all_item, check)
+        #score[user_id][check2] = -1
+        values, index = torch.topk(score[user_id][check], k)
+        numerator = np.intersect1d(users_item, check[index]).shape[0]
         denominator = dic[user_id]['count']
-        # denominator2 = k
-
+        #print(numerator, denominator)
         if denominator == 0:
+            #total_numerator += 1
+            #total_denominator += 1
+            #total += 1 #(numerator / denominator)
+            #count += 1
             continue
-        elif denominator < k and numerator >= k:
-            numerator = denominator
+        #if denominator < k and numerator >= k:
+        #    numerator = denominator
         # recall
         total_denominator += denominator
-        # total_denominator2 += denominator2
         total_numerator += numerator
-        count += 1
-
+        total += (numerator/denominator)
+        count+=1
+    #print(count)
+    print(total_numerator/total_denominator == total/count)
     return total_numerator / total_denominator
 
-def multi_data(model_name, sample) :
-    pred1 = torch.load(f'save_dir/{model_name}_arts_{sample}_hy.pt').detach().cpu()
-    pred2 = torch.load(f'save_dir/{model_name}_patio_{sample}_hy.pt').detach().cpu()
-    pred3 = torch.load(f'save_dir/{model_name}_sports_{sample}_hy.pt').detach().cpu()
-    pred4 = torch.load(f'save_dir/{model_name}_phone_{sample}_hy.pt').detach().cpu()
-    pred5 = torch.load(f'save_dir/{model_name}_home_{sample}_hy.pt').detach().cpu()
+def multi_data(model_name, sample, sample_ratio, k) :
+    # [arts, patio, sports, phone, home]
+    pred1 = torch.load(f'save_dir/{model_name}_arts_{sample}_{sample_ratio}_{k}_hy.pt').detach().cpu()
+    pred2 = torch.load(f'save_dir/{model_name}_patio_{sample}_{sample_ratio}_{k}_hy.pt').detach().cpu()
+    pred3 = torch.load(f'save_dir/{model_name}_sports_{sample}_{sample_ratio}_{k}_hy.pt').detach().cpu()
+    pred4 = torch.load(f'save_dir/{model_name}_phone_{sample}_{sample_ratio}_{k}_hy.pt').detach().cpu()
+    pred5 = torch.load(f'save_dir/{model_name}_home_{sample}_{sample_ratio}_{k}_hy.pt').detach().cpu()
     return torch.stack([pred1, pred2, pred3, pred4, pred5])
 
-def get_count(main, domain) :
+def get_count(main, domain, usernum) :
     # count 미리 저장
     domain_append = main.append(domain)
     domain_append = domain_append[domain_append.user.isin(main.user) & domain_append.item.isin(domain.item)]
     # 주 도메인의 사용자가 보조 도메인 arts에 평점 매긴 개수
     domain_count = domain_append.groupby('user').count().rating
+    #print(domain_count.shape)
+    #print(domain_append.shape, domain_count.shape)
     # 모든 사용자에 대해 일반화
-    total_count = np.zeros(len(main.user.unique()))
+    total_count = np.zeros(usernum)
     #print(total_count[list(domain_count.index)[0]])
     total_count[domain_count.index] = domain_count.values
     total_count = torch.tensor(total_count)
