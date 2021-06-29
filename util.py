@@ -15,7 +15,10 @@ torch.manual_seed(SEED)
 def replaceIndex(dataframe, item_index, user_index):
     dataframe['item'] = dataframe['item'].apply(lambda x: item_index[x])
     dataframe['user'] = dataframe['user'].apply(lambda x: user_index[x])
-    return dataframe
+    # add under 3 lines
+    del dataframe['Unnamed: 0']
+    del dataframe['Unnamed: 0.1']
+    return dataframe.drop_duplicates()
 
 def set_index(clothing, clothing_train, patio, home, arts, phone, sports):
     total_users = np.hstack(
@@ -47,26 +50,12 @@ def set_index(clothing, clothing_train, patio, home, arts, phone, sports):
     sports = replaceIndex(sports, item_index, user_index)
     arts = replaceIndex(arts, item_index, user_index)
 
-    clothing = del_column(clothing)
-    clothing_train = del_column(clothing_train)
-    patio = del_column(patio)
-    phone = del_column(phone)
-    home = del_column(home)
-    sports = del_column(sports)
-    arts = del_column(arts)
-
-
     return clothing, clothing_train, patio, home, arts, phone, sports
 
 def rating_range(hypothesis):
     hypothesis[hypothesis > 5] = 5
     hypothesis[hypothesis < 1] = 1
     return hypothesis
-
-def del_column(domain):
-    del domain['Unnamed: 0']
-    del domain['Unnamed: 0.1']
-    return domain
 
 def dataload():
     # pycharm
@@ -99,15 +88,8 @@ def cluster_rating(users_mf, items_mf , rating, cluster) :
     device = 'cuda:0'
 
     num_clusters = cluster # 수 변경?
-    #
-    # # cluster idx, cluster center
-    # user_cluster_idx, _ = kmeans(users_mf, num_clusters=num_clusters, device=device)
-    # item_cluster_idx, _ = kmeans(items_mf, num_clusters=num_clusters, device=device)
-    #aux_user_cluster_idx, _ = kmeans(aux_users_mf, num_clusters=num_clusters, device=device)
-    #aux_item_cluster_idx, _ = kmeans(aux_items_mf, num_clusters=num_clusters, device=device)
-    # cluster rating mean..
-    # threshold = 5 ?
-    kmeans = KMeans(n_clusters=num_clusters, mode='euclidean', verbose=1) # 여기를 변경해야댐!!!!!!!!!!!!!!!!!!!
+
+    kmeans = KMeans(n_clusters=num_clusters, mode='euclidean', verbose=1)
     user_cluster_idx = kmeans.fit_predict(users_mf)
     item_cluster_idx = kmeans.fit_predict(items_mf)
 
@@ -130,13 +112,46 @@ def cluster_rating(users_mf, items_mf , rating, cluster) :
     #print(new_rating.shape, new_rating.mean(), new_rating)
     return new_rating
 
+def construct_cluster(model, rating_matrix, n_clusters):
+    device = 'cuda:0'
+
+    rating_matrix = torch.LongTensor(rating_matrix).to(device)
+
+    kmeans = KMeans(n_clusters=n_clusters, mode='euclidean', verbose=1)
+
+    users_feature = model.embed_user.weight
+    items_feature = model.embed_item.weight
+
+    user_cluster_idx = kmeans.fit_predict(users_feature).to(device)
+    item_cluster_idx = kmeans.fit_predict(items_feature).to(device)
+
+    # for i in range(10) :
+    #     print(i, user_cluster_idx[user_cluster_idx==i].shape)
+    #     print(i, item_cluster_idx[item_cluster_idx==i].shape)
+
+    new_rating = rating_matrix.clone().float()
+
+    for i in range(n_clusters):  # user
+        for j in range(n_clusters):  # item
+
+            # print(user_cluster_idx[rating_matrix[:,0]] == i, item_cluster_idx[rating_matrix[:,1]] == j)
+
+            t = rating_matrix[(user_cluster_idx[rating_matrix[:, 0]] == i) & (item_cluster_idx[rating_matrix[:, 1]] == j), 2]
+
+            if len(t) <= 5:  # threshold
+                continue
+
+            new_rating[(user_cluster_idx[rating_matrix[:, 0]] == i) & (
+                        item_cluster_idx[rating_matrix[:, 1]] == j), 2] = torch.mean(t.float())
+            # print(i, j, t.shape)
+    # print(new_rating.shape, new_rating.mean(), new_rating)
+    return user_cluster_idx, item_cluster_idx, new_rating
+
 def recall(k, score, dic):
     '''
     k : top-k
     score : predict rating
     '''
-    np.random.seed(SEED)
-
     total_numerator = 0  # 분자
     total_denominator = 0  # 분모
     count = 0
@@ -146,40 +161,59 @@ def recall(k, score, dic):
 
     for user_i, user_id in enumerate(tqdm(list(dic.keys()))):  # test user
         # top-k에서 맞춘 개수 / user 4점 이상인 test item 수
-        users_item = [dic[user_id]['item']]  # 5점 받은 item
-        no_item = np.setdiff1d(all_item, users_item)
-        sample_item = np.random.choice(no_item, 1000, replace=False) # 중복 제거
-        check = np.concatenate((users_item, sample_item))
-        #check2 = np.setdiff1d(all_item, check)
-        #score[user_id][check2] = -1
-        values, index = torch.topk(score[user_id][check], k)
-        numerator = np.intersect1d(users_item, check[index]).shape[0]
-        denominator = dic[user_id]['count']
-        #print(numerator, denominator)
-        if denominator == 0:
-            #total_numerator += 1
-            #total_denominator += 1
-            #total += 1 #(numerator / denominator)
-            #count += 1
-            continue
-        #if denominator < k and numerator >= k:
-        #    numerator = denominator
-        # recall
-        total_denominator += denominator
-        total_numerator += numerator
-        total += (numerator/denominator)
-        count+=1
+
+        for i in range(100):
+            users_item = [dic[user_id]['pos_item'][0]] #np.random.choice(dic[user_id]['pos_item'],1)  # 5점 받은 item
+            no_item = np.setdiff1d(all_item, dic[user_id]['pos_item'])
+            #print(np.unique(score[user_id]), np.unique(score[user_id]).shape)
+            #if user_i == 10 :
+            #    break
+
+            #np.random.seed(1000)
+            sample_item = np.random.choice(no_item, 1000, replace=False) # 중복 제거
+
+            check = np.concatenate((users_item, sample_item)) # sample_item
+            #check2 = np.setdiff1d(all_item, check)
+            #score[user_id][check2] = -1
+
+
+            values, index = torch.topk(score[user_id][check], k)
+            #if values[-1] <=  score[user_id][users_item][0]:
+                #print(values[-1], score[user_id][users_item][0])
+            #    numerator = 1
+            #else:
+            #    numerator = 0
+            #print(values, index)
+            numerator = np.intersect1d(users_item, check[index]).shape[0]
+            denominator = dic[user_id]['count']
+            if denominator == 0:
+                #total_numerator += 1
+                #total_denominator += 1
+                #total += 1 #(numerator / denominator)
+                #count += 1
+                continue
+            #if denominator < k and numerator >= k:
+            #    numerator = denominator
+            # recall
+            total_denominator += denominator
+            total_numerator += numerator
+            total += (numerator/denominator)
+            count+=1
+            # if user_i == 1 :
+            #     print(numerator, denominator)
+            #     if i == 10 :
+            #         break
     #print(count)
-    print(total_numerator/total_denominator == total/count)
+    #print(total_numerator/total_denominator == total/count)
     return total_numerator / total_denominator
 
-def multi_data(model_name, sample, sample_ratio, k) :
+def multi_data(model_name, sample, sample_ratio, k, seed) :
     # [arts, patio, sports, phone, home]
-    pred1 = torch.load(f'save_dir/{model_name}_arts_{sample}_{sample_ratio}_{k}_hy.pt').detach().cpu()
-    pred2 = torch.load(f'save_dir/{model_name}_patio_{sample}_{sample_ratio}_{k}_hy.pt').detach().cpu()
-    pred3 = torch.load(f'save_dir/{model_name}_sports_{sample}_{sample_ratio}_{k}_hy.pt').detach().cpu()
-    pred4 = torch.load(f'save_dir/{model_name}_phone_{sample}_{sample_ratio}_{k}_hy.pt').detach().cpu()
-    pred5 = torch.load(f'save_dir/{model_name}_home_{sample}_{sample_ratio}_{k}_hy.pt').detach().cpu()
+    pred1 = torch.load(f'save_dir/{model_name}_arts_{sample}_{sample_ratio}_{k}_{seed}_hy.pt').detach().cpu()
+    pred2 = torch.load(f'save_dir/{model_name}_patio_{sample}_{sample_ratio}_{k}_{seed}_hy.pt').detach().cpu()
+    pred3 = torch.load(f'save_dir/{model_name}_sports_{sample}_{sample_ratio}_{k}_{seed}_hy.pt').detach().cpu()
+    pred4 = torch.load(f'save_dir/{model_name}_phone_{sample}_{sample_ratio}_{k}_{seed}_hy.pt').detach().cpu()
+    pred5 = torch.load(f'save_dir/{model_name}_home_{sample}_{sample_ratio}_{k}_{seed}_hy.pt').detach().cpu()
     return torch.stack([pred1, pred2, pred3, pred4, pred5])
 
 def get_count(main, domain, usernum) :
@@ -188,9 +222,9 @@ def get_count(main, domain, usernum) :
     domain_append = domain_append[domain_append.user.isin(main.user) & domain_append.item.isin(domain.item)]
     # 주 도메인의 사용자가 보조 도메인 arts에 평점 매긴 개수
     domain_count = domain_append.groupby('user').count().rating
-    #print(domain_count.shape)
     #print(domain_append.shape, domain_count.shape)
     # 모든 사용자에 대해 일반화
+    # print(domain_count.index, domain_count.values)
     total_count = np.zeros(usernum)
     #print(total_count[list(domain_count.index)[0]])
     total_count[domain_count.index] = domain_count.values
